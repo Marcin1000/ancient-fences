@@ -1,3 +1,8 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/readme-banner.png">
+  <img src="assets/readme-banner-light.png" alt="Ancient Fences" width="100%">
+</picture>
+
 # Ancient Fences
 
 **Find the code you wrote because of someone else's bug. Then check whether that bug is still there.**
