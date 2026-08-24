@@ -1,0 +1,39 @@
+{
+  "name": "ancient-fences",
+  "version": "0.1.0",
+  "description": "Finds the code you wrote because of someone else's bug, and checks whether that bug is still there.",
+  "type": "module",
+  "bin": {
+    "ancient-fences": "./bin/ancient-fences.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "technical-debt",
+    "workaround",
+    "chesterton-fence",
+    "code-audit",
+    "maintenance",
+    "stale-code"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT",
+  "scripts": {
+    "test": "node test/detect.test.mjs && node test/tracker.test.mjs && node test/versions.test.mjs && node test/lockfile.test.mjs && node test/cli.test.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Marcin1000/ancient-fences.git"
+  },
+  "homepage": "https://ancientcode.net",
+  "bugs": {
+    "url": "https://github.com/Marcin1000/ancient-fences/issues"
+  },
+  "author": "Marcin Przybylski"
+}
