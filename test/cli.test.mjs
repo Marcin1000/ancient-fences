@@ -50,6 +50,20 @@ assert.match(tasks, /app\.js:1/);
 assert.match(tasks, /shipped in 0\.30\.0/, 'the verdict must name the version that carried the fix');
 assert.doesNotMatch(tasks, /app\.js:5/, 'a fence with an open issue is not work for an agent');
 
+// The documented form is "ancient-fences ." and it must scan, not print help.
+// The first version read the path as a command name and did nothing.
+const forms = [
+  [dir, '--no-blame'],
+  ['scan', dir, '--no-blame'],
+];
+for (const argv of forms) {
+  const { stdout: out } = await run('node', [cli, ...argv], { cwd: dir });
+  assert.match(out, /fences standing/, `form "${argv.join(' ')}" must scan`);
+}
+
+const help = await run('node', [cli, 'help']);
+assert.match(help.stdout, /npx ancient-fences \[path\]/, 'help still reachable by name');
+
 server.close();
 await rm(dir, { recursive: true, force: true });
-console.log('cli: 6 assertions passed');
+console.log('cli: 9 assertions passed');

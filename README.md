@@ -11,9 +11,14 @@ Dependabot bumps the version. Nobody removes the workaround you wrote because
 the old version was broken.
 
 ```bash
-npx ancient-fences .           # what is standing in this codebase
-npx ancient-fences . --check   # and whether the reasons still hold
+# Not on npm yet, so run it straight from this repository:
+npx github:Marcin1000/ancient-fences .           # what is standing in this codebase
+npx github:Marcin1000/ancient-fences . --check   # and whether the reasons still hold
 ```
+
+Once it is published to npm the command becomes `npx ancient-fences .`. Until
+then the line above is the one that works, and this README says so rather than
+promising something that returns a 404.
 
 ## The problem
 
@@ -114,7 +119,7 @@ fence is dead is the scarce part; every editor now ships something that can do
 the deleting. So `--tasks` writes the verified findings as work:
 
 ```bash
-npx ancient-fences . --check --tasks
+npx github:Marcin1000/ancient-fences . --check --tasks
 ```
 
 You get a markdown file with one entry per dead fence: the file and line, the

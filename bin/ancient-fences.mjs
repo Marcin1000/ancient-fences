@@ -9,14 +9,20 @@ import { renderText, renderHtml, renderTasks, summarize } from '../src/report.mj
 import { readInstalled } from '../src/lockfile.mjs';
 
 const args = process.argv.slice(2);
-const cmd = args[0]?.startsWith('--') ? 'scan' : (args[0] ?? 'scan');
+
+// "ancient-fences ." has to scan the current directory. The first version read
+// any first argument as a command name, so the documented form printed the
+// help text and did nothing. Only the words below are commands; everything
+// else is a path.
+const COMMANDS = new Set(['scan', 'help']);
+const cmd = args[0] && COMMANDS.has(args[0]) ? args[0] : 'scan';
 const flags = args.filter((a) => a.startsWith('--'));
 const has = (f) => flags.some((x) => x === f);
 const value = (f) => {
   const hit = flags.find((x) => x.startsWith(`${f}=`));
   return hit ? hit.slice(f.length + 1) : null;
 };
-const positional = args.slice(args[0]?.startsWith('--') ? 0 : 1).filter((a) => !a.startsWith('--'));
+const positional = args.filter((a) => !a.startsWith('--') && !COMMANDS.has(a));
 const root = resolve(positional[0] ?? process.cwd());
 
 if (cmd !== 'scan') {
