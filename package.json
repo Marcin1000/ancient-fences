@@ -4,7 +4,7 @@
   "description": "Finds the code you wrote because of someone else's bug, and checks whether that bug is still there.",
   "type": "module",
   "bin": {
-    "ancient-fences": "./bin/ancient-fences.mjs"
+    "ancient-fences": "bin/ancient-fences.mjs"
   },
   "files": [
     "bin",
