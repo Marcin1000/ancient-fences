@@ -64,6 +64,8 @@ export function renderText(fences, summary, repoName, checked = false) {
   if (summary.skipped) {
     L.push(`  ${n(summary.skipped)}  bundled or minified files left out: their fences belong to`);
     L.push('        the libraries they were built from (--include-generated to scan them)');
+    for (const f of (summary.skippedFiles ?? []).slice(0, 6)) L.push(`        ${f.path}  [${f.why}]`);
+    if ((summary.skippedFiles ?? []).length > 6) L.push(`        and ${summary.skippedFiles.length - 6} more`);
   }
   L.push('');
 
@@ -74,6 +76,15 @@ export function renderText(fences, summary, repoName, checked = false) {
       L.push(`  ${String(count).padStart(4)}  ${level}`);
     }
     L.push('');
+  }
+
+  if (summary.total === 0) {
+    L.push('  Nothing found. No comment in this codebase records an external');
+    L.push('  reason for the code around it: no tracker link, no deadline, no');
+    L.push('  note about a workaround. That is either a clean codebase or an');
+    L.push('  undocumented one, and this tool cannot tell those apart.');
+    L.push('');
+    return L.join('\n');
   }
 
   L.push('  CHECK THESE FIRST  (longest untouched)');
@@ -157,11 +168,18 @@ footer p{max-width:62ch}
     <div class="stat"><b>${summary.old}</b><span>untouched for 3+ years</span></div>
     <div class="stat"><b>${summary.oldest === null ? '-' : Math.round(summary.oldest)}</b><span>years, the oldest one</span></div>
   </div>
-  <h2>Check these first</h2>
+  ${summary.total === 0 ? `<h2>Nothing found</h2>
+  <p class="sub">No comment in this codebase records an external reason for the code around it: no tracker link, no deadline, no note about a workaround. That is either a clean codebase or an undocumented one, and this tool cannot tell those apart.</p>` : `<h2>Check these first</h2>
   <div class="scroll"><table>
     <thead><tr><th>Untouched</th><th>Where</th><th>Reason given</th><th>${checked ? 'Verdict' : 'State'}</th></tr></thead>
     <tbody>${rows}</tbody>
-  </table></div>
+  </table></div>`}
+  ${summary.skipped ? `<h2>Left out</h2>
+  <p class="sub">${summary.skipped} file${summary.skipped === 1 ? ' was' : 's were'} skipped as a build product. The fences inside a bundle belong to the libraries it was built from, not to this team.</p>
+  <div class="scroll"><table>
+    <thead><tr><th>File</th><th>Why</th></tr></thead>
+    <tbody>${(summary.skippedFiles ?? []).map((f) => `<tr><td><code>${esc(f.path)}</code></td><td class="num">${esc(f.why)}</td></tr>`).join('\n')}</tbody>
+  </table></div>` : ''}
 </main>
 <footer><div class="wrap">
   <p><strong>This is one repository and one kind of risk.</strong> The same blindness applies to everything else nobody re-checks: what was already paid for, which parts only one person understands, whether this codebase could be handed to another team at all. That is what Ancient Code measures.</p>

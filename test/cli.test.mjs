@@ -61,6 +61,16 @@ for (const argv of forms) {
   assert.match(out, /fences standing/, `form "${argv.join(' ')}" must scan`);
 }
 
+// A codebase with nothing to report must say so in words. An empty table
+// under the heading "check these first" is not an answer.
+const quiet = await mkdtemp(join(tmpdir(), 'ancient-quiet-'));
+await writeFile(join(quiet, 'lib.js'), '!function(e){if("object"==typeof exports)module.exports=e()}(function(){});\n' + '// padding\n'.repeat(4000));
+await writeFile(join(quiet, 'app.js'), 'export const x = 1;\n');
+const empty = await run('node', [cli, quiet, '--no-blame']);
+assert.match(empty.stdout, /Nothing found/);
+assert.match(empty.stdout, /lib\.js\s+\[bundle\]/, 'a skipped file is named, so nobody has to trust the count');
+await rm(quiet, { recursive: true, force: true });
+
 const help = await run('node', [cli, 'help']);
 assert.match(help.stdout, /npx ancient-fences \[path\]/, 'help still reachable by name');
 
@@ -83,4 +93,4 @@ assert.match(glued.stderr, /option got stuck to the path/);
 
 server.close();
 await rm(dir, { recursive: true, force: true });
-console.log('cli: 13 assertions passed');
+console.log('cli: 15 assertions passed');

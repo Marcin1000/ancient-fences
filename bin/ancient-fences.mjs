@@ -90,6 +90,7 @@ if (checking) {
 
 const summary = summarize(fences, states);
 summary.skipped = skipped.length;
+summary.skippedFiles = skipped;
 const name = basename(root);
 
 const reportFlag = flags.find((f) => f === '--report' || f.startsWith('--report='));
