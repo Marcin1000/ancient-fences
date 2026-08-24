@@ -61,6 +61,10 @@ export function renderText(fences, summary, repoName, checked = false) {
   L.push(`  ${n(summary.trackers)}  distinct external issues to check`);
   L.push(`  ${n(summary.old)}  fences untouched for 3+ years`);
   if (summary.oldest !== null) L.push(`  ${n(Math.round(summary.oldest))}  years old is the oldest one`);
+  if (summary.skipped) {
+    L.push(`  ${n(summary.skipped)}  bundled or minified files left out: their fences belong to`);
+    L.push('        the libraries they were built from (--include-generated to scan them)');
+  }
   L.push('');
 
   if (checked) {

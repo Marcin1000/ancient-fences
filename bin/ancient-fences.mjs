@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { resolve, basename, join } from 'node:path';
-import { writeFile } from 'node:fs/promises';
+import { writeFile, stat } from 'node:fs/promises';
 import { walkFiles } from '../src/walk.mjs';
 import { detectFences } from '../src/detect.mjs';
 import { blameAll } from '../src/age.mjs';
@@ -38,13 +38,32 @@ then check whether that bug is still there.
   --api-base=URL      alternate API (GitHub Enterprise, or a mock in tests)
   --json              full machine-readable output
   --no-blame          skip fence age (faster, tells you less)
+  --include-generated scan bundles and minified builds too. They are skipped by
+                      default: their fences belong to the libraries they were
+                      built from, not to you
 `;
   console.log(usage);
   process.exit(cmd === 'help' || has('--help') ? 0 : 1);
 }
 
+// Scanning a path that is not there used to print a clean report saying zero
+// fences, which reads exactly like good news. A tool that says "nothing to
+// worry about" when it looked at nothing is worse than no tool.
+try {
+  const info = await stat(root);
+  if (!info.isDirectory()) throw new Error('not a directory');
+} catch {
+  console.error(`ancient-fences: nothing to scan at ${root}`);
+  if (positional[0] && positional[0].includes('--')) {
+    console.error('It looks like an option got stuck to the path. Put a space before it:');
+    console.error('  npx ancient-fences . --report');
+  }
+  process.exit(1);
+}
+
+const skipped = [];
 const fences = [];
-for await (const file of walkFiles(root)) {
+for await (const file of walkFiles(root, { skipped, includeGenerated: has('--include-generated') })) {
   fences.push(...detectFences(file.path, file.text));
 }
 
@@ -70,6 +89,7 @@ if (checking) {
 }
 
 const summary = summarize(fences, states);
+summary.skipped = skipped.length;
 const name = basename(root);
 
 const reportFlag = flags.find((f) => f === '--report' || f.startsWith('--report='));
@@ -87,7 +107,7 @@ if (tasksFlag) {
 }
 
 if (has('--json')) {
-  console.log(JSON.stringify({ repo: root, summary, fences }, null, 2));
+  console.log(JSON.stringify({ repo: root, summary, fences, skipped }, null, 2));
 } else {
   console.log(renderText(fences, summary, name, checking));
 }

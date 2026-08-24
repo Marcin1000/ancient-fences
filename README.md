@@ -11,14 +11,12 @@ Dependabot bumps the version. Nobody removes the workaround you wrote because
 the old version was broken.
 
 ```bash
-# Not on npm yet, so run it straight from this repository:
-npx github:Marcin1000/ancient-fences .           # what is standing in this codebase
-npx github:Marcin1000/ancient-fences . --check   # and whether the reasons still hold
+npx ancient-fences .           # what is standing in this codebase
+npx ancient-fences . --check   # and whether the reasons still hold
 ```
 
-Once it is published to npm the command becomes `npx ancient-fences .`. Until
-then the line above is the one that works, and this README says so rather than
-promising something that returns a 404.
+No installation, no configuration, no account. It reads the repository you
+point it at and prints what it found.
 
 ## The problem
 
@@ -107,7 +105,14 @@ green light. A tool that reassures you without grounds is worse than no tool.
 --api-base=URL      alternate API (GitHub Enterprise, or a mock in tests)
 --json              full machine-readable output
 --no-blame          skip fence age (faster, tells you less)
+--include-generated scan bundles and minified builds too
 ```
+
+Bundles committed into a repository (`vendor.js`, a browserify or webpack
+build, anything minified) are skipped, and the summary says how many were left
+out. The fences inside them belong to the libraries they were built from, so
+listing them buries the ones your team can actually act on. `dist`, `build`,
+`node_modules`, `vendor` and `third_party` are skipped for the same reason.
 
 Issue states are cached in `.ancient-fences-cache.json` next to the scanned
 repository. Add it to your `.gitignore`.
@@ -119,7 +124,7 @@ fence is dead is the scarce part; every editor now ships something that can do
 the deleting. So `--tasks` writes the verified findings as work:
 
 ```bash
-npx github:Marcin1000/ancient-fences . --check --tasks
+npx ancient-fences . --check --tasks
 ```
 
 You get a markdown file with one entry per dead fence: the file and line, the

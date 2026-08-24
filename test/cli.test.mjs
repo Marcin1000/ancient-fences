@@ -64,6 +64,23 @@ for (const argv of forms) {
 const help = await run('node', [cli, 'help']);
 assert.match(help.stdout, /npx ancient-fences \[path\]/, 'help still reachable by name');
 
+// A path that is not there must fail loudly. Reporting zero fences for a
+// directory nobody looked at reads like an all clear, which is the one thing
+// this tool must never say by accident.
+const missing = await run('node', [cli, join(dir, 'nowhere')]).then(
+  (r) => ({ code: 0, ...r }),
+  (e) => ({ code: e.code, stdout: e.stdout, stderr: e.stderr }),
+);
+assert.equal(missing.code, 1, 'a missing path is an error, not an empty report');
+assert.match(missing.stderr, /nothing to scan/);
+assert.doesNotMatch(missing.stdout ?? '', /fences standing/);
+
+// The help text shows "--report[=file]", and it is easy to paste it straight
+// onto the path. Say what happened instead of scanning a directory named
+// after the option.
+const glued = await run('node', [cli, '.--report[=file]'], { cwd: dir }).catch((e) => e);
+assert.match(glued.stderr, /option got stuck to the path/);
+
 server.close();
 await rm(dir, { recursive: true, force: true });
-console.log('cli: 9 assertions passed');
+console.log('cli: 13 assertions passed');
