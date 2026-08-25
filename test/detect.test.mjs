@@ -27,3 +27,19 @@ assert.equal(e[0].kind, 'unmarked');
 assert.equal(e[0].premise.type, 'none');
 
 console.log('detect: 9 assertions passed');
+
+// Where the fences are, so a count can be checked against the files it came
+// from. The ranked list only shows the ones with a tracker, which leaves the
+// rest of the total unexplained.
+{
+  const { byFile } = await import('../src/report.mjs');
+  const rows = byFile([
+    { file: 'lib/big.js', kind: 'unmarked' },
+    { file: 'lib/big.js', kind: 'docs' },
+    { file: 'app.js', kind: 'code' },
+  ]);
+  assert.equal(rows[0].file, 'lib/big.js');
+  assert.equal(rows[0].total, 2);
+  assert.deepEqual(rows[0].kinds, { unmarked: 1, docs: 1 });
+  console.log('detect: 3 more assertions passed (byFile)');
+}

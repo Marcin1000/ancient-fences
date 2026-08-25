@@ -34,6 +34,23 @@ export function summarize(fences, states = new Map()) {
   return { total: fences.length, byKind, trackers: trackers.size, overdue, old, oldest, verdicts, checked: states.size };
 }
 
+/**
+ * Fences per file, biggest first. The ranked list only shows the ones with a
+ * tracker or a passed deadline, so without this a reader cannot tell where the
+ * rest of the count comes from, and cannot check whether the tool skipped or
+ * counted the right files.
+ */
+export function byFile(fences, limit = 8) {
+  const counts = new Map();
+  for (const f of fences) {
+    const row = counts.get(f.file) ?? { file: f.file, total: 0, kinds: {} };
+    row.total++;
+    row.kinds[f.kind] = (row.kinds[f.kind] ?? 0) + 1;
+    counts.set(f.file, row);
+  }
+  return [...counts.values()].sort((a, b) => b.total - a.total).slice(0, limit);
+}
+
 export function ranked(fences) {
   return fences
     .filter((f) => f.premise.type === 'tracker' || (f.premise.type === 'date' && f.premise.overdue))
@@ -86,6 +103,14 @@ export function renderText(fences, summary, repoName, checked = false) {
     L.push('');
     return L.join('\n');
   }
+
+  L.push('  WHERE THEY ARE');
+  L.push('  ' + '-'.repeat(70));
+  for (const row of byFile(fences)) {
+    const kinds = Object.entries(row.kinds).map(([k, n]) => `${n} ${k}`).join(', ');
+    L.push(`  ${n(row.total)}  ${row.file}  (${kinds})`);
+  }
+  L.push('');
 
   L.push('  CHECK THESE FIRST  (longest untouched)');
   L.push('  ' + '='.repeat(70));
@@ -174,6 +199,11 @@ footer p{max-width:62ch}
     <thead><tr><th>Untouched</th><th>Where</th><th>Reason given</th><th>${checked ? 'Verdict' : 'State'}</th></tr></thead>
     <tbody>${rows}</tbody>
   </table></div>`}
+  ${fences.length ? `<h2>Where they are</h2>
+  <div class="scroll"><table>
+    <thead><tr><th>File</th><th>Fences</th><th>Kinds</th></tr></thead>
+    <tbody>${byFile(fences, 15).map((r) => `<tr><td><code>${esc(r.file)}</code></td><td class="num">${r.total}</td><td class="num">${esc(Object.entries(r.kinds).map(([k, n]) => `${n} ${k}`).join(', '))}</td></tr>`).join('\n')}</tbody>
+  </table></div>` : ''}
   ${summary.skipped ? `<h2>Left out</h2>
   <p class="sub">${summary.skipped} file${summary.skipped === 1 ? ' was' : 's were'} skipped as a build product. The fences inside a bundle belong to the libraries it was built from, not to this team.</p>
   <div class="scroll"><table>
