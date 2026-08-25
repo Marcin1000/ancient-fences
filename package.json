@@ -1,6 +1,6 @@
 {
   "name": "ancient-fences",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Finds the code you wrote because of someone else's bug, and checks whether that bug is still there.",
   "type": "module",
   "bin": {

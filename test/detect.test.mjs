@@ -27,6 +27,49 @@ assert.equal(e[0].kind, 'unmarked');
 assert.equal(e[0].premise.type, 'none');
 
 console.log('detect: 9 assertions passed');
+// 6. A weak word on its own is ordinary English, not evidence. Counting
+// "until" and "polyfill" as fences produced 232 findings on webpack, of which
+// almost none were fences.
+assert.equal(detectFences('a.js', '// Valid only until the next call to parseHtml.\n').length, 0);
+assert.equal(detectFences('a.js', '// Exactly one polyfill per page, before the body scripts.\n').length, 0);
+assert.equal(detectFences('a.js', '// Memoized evaluation is a few ms; a regression here is exponential.\n').length, 0);
+
+// 7. The same weak word counts once the comment names the condition.
+const g = detectFences('a.js', '// Temporary, remove after 2020-03-01 when the API is stable.\n');
+assert.equal(g.length, 1);
+assert.equal(g[0].kind, 'deadline');
+
+// 8. "remove this" is a fence in a note and prose everywhere else.
+assert.equal(detectFences('a.js', '// TODO webpack 6: remove this class\n').length, 1);
+assert.equal(detectFences('a.js', '// We iterate over the children to remove this from their parents.\n').length, 0);
+
+// 9. A comment after code, on a line that also contains a string. The first
+// version skipped any line with a quote and missed these entirely.
+const h = detectFences('a.js', 'const u = fetch("/x"); // workaround for https://github.com/nodejs/node/issues/1\n');
+assert.equal(h.length, 1);
+assert.equal(h[0].premise.refs[0].id, 'github:nodejs/node#1');
+
+// 10. A URL inside a string is not a comment, however much it looks like one.
+assert.equal(detectFences('a.js', 'const u = "https://github.com/nodejs/node/issues/2"; // fine\n').length, 0);
+
+// 11. A stylesheet selector is not a comment. "#hack-banner {" was reported as
+// a fence with no sign.
+assert.equal(detectFences('a.css', '#hack-banner {\n  display: none;\n}\n').length, 0);
+assert.equal(detectFences('a.css', '/* Workaround for a Safari repaint bug, see https://bugs.webkit.org/show_bug.cgi?id=1 */\n').length, 1);
+
+// 12. Floor division in Python is not a comment either.
+assert.equal(detectFences('a.py', 'rows = total // per_page  # hack, remove after 2019-01-01\n').length, 1);
+assert.equal(detectFences('a.py', 'rows = total // per_page + workaround_offset\n').length, 0);
+
+// 13. The comment text keeps the words and drops the markers, because it is
+// read by people and pasted into agent tasks.
+const i = detectFences('a.js', '// Workaround for https://github.com/a/b/issues/9\n// Remove once fixed upstream.\n');
+assert.equal(i[0].text.includes('// Remove'), false, 'the marker of the second line is stripped');
+assert.equal(i[0].text.startsWith('//'), false);
+assert.match(i[0].text, /Remove once fixed upstream/);
+
+console.log('detect: 16 more assertions passed (precision)');
+
 
 // Where the fences are, so a count can be checked against the files it came
 // from. The ranked list only shows the ones with a tracker, which leaves the

@@ -52,12 +52,17 @@ that no longer exists.
 
 Two runs, full clones, August 2026:
 
-| Repository | Fences | Because of someone else's bug | No reason recorded | Oldest |
+| Repository | Fences | Because of someone else's bug | Untouched 3+ years | Oldest |
 |---|---|---|---|---|
-| puppeteer/puppeteer | 99 | 63 | 29 | 7.9 yr |
-| webpack/webpack | 354 | 65 | 288 | 8.8 yr |
+| puppeteer/puppeteer | 77 | 62 | 48 | 9.1 yr |
+| webpack/webpack | 93 | 65 | 23 | 8.8 yr |
 
 Both are well-maintained projects by good engineers. That is the point.
+
+Measured on a full clone, because a shallow one cannot date a line. Numbers
+from earlier versions were higher and worse: counting the word "until" as
+evidence turned two hundred ordinary comments in webpack into findings. A
+number you have to discount is not worth printing.
 
 ## What it finds
 
@@ -67,6 +72,15 @@ Both are well-maintained projects by good engineers. That is the point.
 | `docs` | a documented limitation pointing at an issue | the docs now lie, so fix them |
 | `deadline` | a date written into a comment | the date passed, revisit |
 | `unmarked` | clearly a workaround, no recorded reason | write the reason down, or remove it |
+
+A comment counts as a fence when it links to an external tracker, or says
+something that only a fence says ("workaround", "kludge", "no longer needed",
+"do not upgrade"). Words that merely appear in fences ("until", "polyfill",
+"temporary", "regression") count only when the comment also names the
+condition: a deadline or a version. Phrases that read as prose elsewhere
+("remove this", "blocked by") count next to a `TODO`, `FIXME` or `HACK`, or
+next to a named condition. Comment markers are read per language, so `#fff` in
+a stylesheet and `a // b` in Python are not comments.
 
 Trackers understood: GitHub issues and pull requests, Chromium (`crbug.com`),
 Mozilla Bugzilla, WebKit.
@@ -91,6 +105,11 @@ a workaround for a bug that was fixed years ago, because nobody upgraded.
 `package-lock.json`, `yarn.lock` and `pnpm-lock.yaml` are read when present. No
 lockfile means the tool says less, never something false.
 
+Fence age comes from `git blame`, which needs history. In a shallow clone
+(`--depth 1`, and every default CI checkout) git dates every line to the day it
+was fetched, so the report says age was not measured rather than printing a
+confident zero.
+
 **An unknown issue state never produces `still valid`.** Not knowing is not a
 green light. A tool that reassures you without grounds is worse than no tool.
 (The test enforcing this caught a real bug on the prototype's first run.)
@@ -106,7 +125,17 @@ green light. A tool that reassures you without grounds is worse than no tool.
 --json              full machine-readable output
 --no-blame          skip fence age (faster, tells you less)
 --include-generated scan bundles and minified builds too
+--cache=FILE        where to keep issue states
+--no-cache          ignore cached state and ask the tracker again
+--max-age-days=N    how old a cached state may be before it is re-checked
+                    (default 7)
 ```
+
+An option this tool does not recognise stops the run. A mistyped `--chek`
+used to print a normal report, and the reader believed the trackers had been
+consulted.
+
+You can also point it at a single file: `npx ancient-fences src/thing.js`.
 
 Bundles committed into a repository (`vendor.js`, a browserify or webpack
 build, anything minified) are skipped, and the summary says how many were left
@@ -114,8 +143,17 @@ out. The fences inside them belong to the libraries they were built from, so
 listing them buries the ones your team can actually act on. `dist`, `build`,
 `node_modules`, `vendor` and `third_party` are skipped for the same reason.
 
-Issue states are cached in `.ancient-fences-cache.json` next to the scanned
-repository. Add it to your `.gitignore`.
+Issue states are cached in your user cache directory (`$XDG_CACHE_HOME`,
+`%LOCALAPPDATA%`, or `~/.cache`), never inside the repository being scanned.
+Every entry records when it was read, entries older than a week are re-checked,
+and if the tracker cannot be reached the report says which day the answer is
+from:
+
+```
+VERDICT:  remove (reason disappeared 2021-04-02 (state as of 2026-08-18))
+```
+
+An issue state is a snapshot, not a fact. Closed issues get reopened.
 
 ## Working with an agent
 

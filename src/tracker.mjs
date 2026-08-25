@@ -8,14 +8,20 @@ import { fixVersionFrom, packageForRef, shippedStatus } from './versions.mjs';
  * does the reason still exist?
  */
 export async function checkGithubRefs(ids, opts = {}) {
-  const apiBase = opts.apiBase ?? 'https://api.github.com';
+  const apiBase = (opts.apiBase ?? 'https://api.github.com').replace(/\/+$/, '');
   const token = opts.token ?? process.env.GITHUB_TOKEN ?? null;
-  const cache = await loadCache(opts.cachePath);
+  const maxAgeDays = Number.isFinite(opts.maxAgeDays) ? opts.maxAgeDays : 7;
+  const cache = opts.noCache ? {} : await loadCache(opts.cachePath);
   const result = new Map();
 
   for (const id of ids) {
-    if (cache[id] && !opts.noCache) {
-      result.set(id, cache[id]);
+    // An issue state is not a fact, it is a snapshot: closed issues get
+    // reopened. A cache with no age would let this tool say "the reason
+    // disappeared" forever on the strength of one lookup, offline, with
+    // nothing on screen to say how old the answer is.
+    const cached = cache[id];
+    if (cached && freshEnough(cached, maxAgeDays)) {
+      result.set(id, cached);
       continue;
     }
     const m = id.match(/^github:([\w.-]+)\/([\w.-]+)#(\d+)$/);
@@ -28,19 +34,19 @@ export async function checkGithubRefs(ids, opts = {}) {
     try {
       res = await fetch(url, { headers });
     } catch (err) {
-      result.set(id, { state: 'unknown', reason: `network: ${err.message}` });
+      result.set(id, staleOr(cached, { state: 'unknown', reason: `network: ${err.message}` }));
       continue;
     }
     if (res.status === 403 || res.status === 429) {
-      result.set(id, { state: 'unknown', reason: 'rate limited or no access' });
+      result.set(id, staleOr(cached, { state: 'unknown', reason: 'rate limited or no access' }));
       continue;
     }
     if (res.status === 404) {
-      result.set(id, { state: 'unknown', reason: 'issue missing or private' });
+      result.set(id, staleOr(cached, { state: 'unknown', reason: 'issue missing or private' }));
       continue;
     }
     if (!res.ok) {
-      result.set(id, { state: 'unknown', reason: `HTTP ${res.status}` });
+      result.set(id, staleOr(cached, { state: 'unknown', reason: `HTTP ${res.status}` }));
       continue;
     }
     const body = await res.json();
@@ -53,6 +59,7 @@ export async function checkGithubRefs(ids, opts = {}) {
       // Kept rather than the whole payload: this is the only part that tells
       // us whether the fix reached a release, and the cache stays small.
       fix: fixVersionFrom(body),
+      checkedAt: new Date().toISOString(),
     };
     result.set(id, entry);
     cache[id] = entry;
@@ -60,6 +67,21 @@ export async function checkGithubRefs(ids, opts = {}) {
 
   await saveCache(opts.cachePath, cache);
   return result;
+}
+
+function freshEnough(entry, maxAgeDays) {
+  if (!entry?.checkedAt) return false;
+  const age = Date.now() - new Date(entry.checkedAt).getTime();
+  return Number.isFinite(age) && age >= 0 && age < maxAgeDays * 24 * 3600 * 1000;
+}
+
+/**
+ * The tracker could not be reached now. An old answer is still worth more than
+ * nothing, as long as every report that uses it says how old it is.
+ */
+function staleOr(cached, failure) {
+  if (!cached || !cached.checkedAt) return failure;
+  return { ...cached, stale: true, reason: `${failure.reason}; using the state read on ${cached.checkedAt.slice(0, 10)}` };
 }
 
 /**
@@ -78,21 +100,32 @@ export function verdict(fence, states, installed = new Map()) {
   }
   // An unknown state must never come out as "still valid". Not knowing is not
   // a green light, and a tool that reassures without grounds is worse than none.
-  const known = fence.premise.refs
-    .map((r) => states.get(r.id))
-    .filter((s) => s && s.state !== 'unknown');
-  if (known.length === 0) return { level: 'unchecked', why: 'could not determine issue state' };
+  const seen = fence.premise.refs.map((r) => states.get(r.id)).filter(Boolean);
+  const known = seen.filter((s) => s.state !== 'unknown');
+  if (known.length === 0) {
+    // Not asking and asking without an answer are different states, and a
+    // report that spells both "unchecked" invites the reader to assume the
+    // worse one happened.
+    return seen.length === 0
+      ? { level: 'unchecked', why: 'the tracker was not consulted in this run (--check does that)' }
+      : { level: 'unchecked', why: seen[0].reason ?? 'could not determine issue state' };
+  }
+  // An answer read from an old cache still says when it was read, in the
+  // verdict itself, so nobody acts on a year-old snapshot believing it is now.
+  const asOf = known.some((s) => s.stale)
+    ? ` (state as of ${known.map((s) => s.checkedAt).filter(Boolean).sort()[0]?.slice(0, 10)})`
+    : '';
   if (known.every((s) => s.state === 'closed')) {
     const shipped = shippedFor(fence, states, installed);
-    if (shipped?.state === 'shipped') return { level: 'remove', why: shipped.text };
-    if (shipped?.state === 'not upgraded') return { level: 'upgrade first', why: shipped.text };
+    if (shipped?.state === 'shipped') return { level: 'remove', why: shipped.text + asOf };
+    if (shipped?.state === 'not upgraded') return { level: 'upgrade first', why: shipped.text + asOf };
     const when = known.map((s) => s.closedAt).filter(Boolean).sort().pop();
-    return { level: 'remove', why: when ? `reason disappeared ${when.slice(0, 10)}` : 'issue closed' };
+    return { level: 'remove', why: (when ? `reason disappeared ${when.slice(0, 10)}` : 'issue closed') + asOf };
   }
   if (known.some((s) => s.state === 'closed')) {
-    return { level: 'review', why: 'some of the reasons are gone' };
+    return { level: 'review', why: 'some of the reasons are gone' + asOf };
   }
-  return { level: 'still valid', why: 'issue still open' };
+  return { level: 'still valid', why: 'issue still open' + asOf };
 }
 
 /**

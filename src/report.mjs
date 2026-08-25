@@ -29,6 +29,7 @@ export function summarize(fences, states = new Map()) {
   const verdicts = {};
   for (const f of fences) {
     if (!f.verdict) continue;
+    if (states.size === 0 && f.premise.type !== 'date') continue;
     verdicts[f.verdict.level] = (verdicts[f.verdict.level] ?? 0) + 1;
   }
   return { total: fences.length, byKind, trackers: trackers.size, overdue, old, oldest, verdicts, checked: states.size };
@@ -63,6 +64,22 @@ function premiseOf(f) {
     : `deadline ${f.premise.date} (passed)`;
 }
 
+/** Long explanations have to stay readable in a terminal. */
+function wrap(text, width) {
+  const out = [];
+  let line = '';
+  for (const word of String(text).split(/\s+/)) {
+    if (line && line.length + word.length + 1 > width) {
+      out.push(line);
+      line = word;
+    } else {
+      line = line ? `${line} ${word}` : word;
+    }
+  }
+  if (line) out.push(line);
+  return out;
+}
+
 export function renderText(fences, summary, repoName, checked = false) {
   const L = [];
   const n = (x) => String(x).padStart(4);
@@ -76,8 +93,23 @@ export function renderText(fences, summary, repoName, checked = false) {
   L.push(`  ${n(summary.byKind.unmarked)}  fences with no sign`);
   L.push('  ' + '-'.repeat(70));
   L.push(`  ${n(summary.trackers)}  distinct external issues to check`);
-  L.push(`  ${n(summary.old)}  fences untouched for 3+ years`);
-  if (summary.oldest !== null) L.push(`  ${n(Math.round(summary.oldest))}  years old is the oldest one`);
+  if (summary.history && summary.history.usable === false) {
+    L.push(`    --  age not measured`);
+    for (const line of wrap(summary.history.why, 62)) L.push(`        ${line}`);
+  } else {
+    L.push(`  ${n(summary.old)}  fences untouched for 3+ years`);
+    if (summary.oldest !== null && summary.oldest >= 1) {
+      L.push(`  ${n(summary.oldest.toFixed(1))}  years old is the oldest one`);
+    } else if (summary.oldest !== null) {
+      L.push(`        every fence here was touched within the last year`);
+    }
+  }
+  if (summary.checkedAt) {
+    const { oldest, newest } = summary.checkedAt;
+    L.push(oldest.slice(0, 10) === newest.slice(0, 10)
+      ? `        issue states read ${newest.slice(0, 10)}`
+      : `        issue states read between ${oldest.slice(0, 10)} and ${newest.slice(0, 10)}`);
+  }
   if (summary.skipped) {
     L.push(`  ${n(summary.skipped)}  bundled or minified files left out: their fences belong to`);
     L.push('        the libraries they were built from (--include-generated to scan them)');
@@ -112,18 +144,25 @@ export function renderText(fences, summary, repoName, checked = false) {
   }
   L.push('');
 
-  L.push('  CHECK THESE FIRST  (longest untouched)');
+  const list = ranked(fences);
+  L.push(`  CHECK THESE FIRST  (longest untouched)`);
   L.push('  ' + '='.repeat(70));
-  for (const f of ranked(fences).slice(0, 15)) {
+  if (list.length > 15) {
+    L.push(`  showing 15 of ${list.length} with a recorded reason; --json or --report has them all`);
+    L.push('');
+  }
+  for (const f of list.slice(0, 15)) {
     const y = yearsSince(f.lastTouched);
     const age = y === null ? '   ?  ' : `${y.toFixed(1)} yr`;
     L.push(`  ${age.padStart(7)}  ${f.file}:${f.line}   [${f.kind}]`);
     L.push(`           reason:   ${premiseOf(f)}`);
     L.push(`           comment:  ${f.text.slice(0, 92)}`);
-    if (f.verdict) L.push(`           VERDICT:  ${f.verdict.level} (${f.verdict.why})`);
+    if (showVerdict(f, checked)) L.push(`           VERDICT:  ${f.verdict.level} (${f.verdict.why})`);
     L.push('');
   }
-  L.push('  Every closed issue above is code you can delete.');
+  L.push(checked
+    ? '  Every closed issue above is code you can delete.'
+    : '  Run again with --check to ask the trackers whether these reasons still hold.');
   L.push('');
   return L.join('\n');
 }
@@ -134,6 +173,15 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
  * A standalone report meant to be forwarded to whoever pays for the codebase.
  * Developers find the fences; someone else decides what they cost.
  */
+/**
+ * A verdict is worth showing when it means something. Without --check the only
+ * ones the tool can stand behind are the deadlines, which need no network, and
+ * repeating "the tracker was not consulted" on forty rows says nothing.
+ */
+function showVerdict(fence, checked) {
+  return Boolean(fence.verdict) && (checked || fence.premise.type === 'date');
+}
+
 export function renderHtml(fences, summary, repoName, checked = false) {
   const rows = ranked(fences).slice(0, 40).map((f) => {
     const y = yearsSince(f.lastTouched);
@@ -142,7 +190,7 @@ export function renderHtml(fences, summary, repoName, checked = false) {
       <td class="num">${y === null ? '-' : y.toFixed(1) + ' yr'}</td>
       <td><code>${esc(f.file)}:${f.line}</code><p>${esc(f.text.slice(0, 130))}</p></td>
       <td class="num">${esc(premiseOf(f))}</td>
-      <td>${v ? `<span class="v v-${esc(v.level.replace(/\s+/g, '-'))}">${esc(v.level)}</span><p>${esc(v.why)}</p>` : '<span class="v">not checked</span>'}</td>
+      <td>${showVerdict(f, checked) ? `<span class="v v-${esc(v.level.replace(/\s+/g, '-'))}">${esc(v.level)}</span><p>${esc(v.why)}</p>` : '<span class="v">not checked</span>'}</td>
     </tr>`;
   }).join('\n');
 
@@ -167,11 +215,13 @@ h1{font:300 clamp(2rem,5vw,3.2rem)/1.05 ui-serif,Georgia,serif;letter-spacing:-.
 .stat span{font-size:.78rem;color:var(--dim);line-height:1.35}
 h2{font:300 1.6rem/1.1 ui-serif,Georgia,serif;margin:2.5rem 0 1rem}
 .scroll{overflow-x:auto;border:1px solid var(--line);background:var(--surface)}
-table{border-collapse:collapse;width:100%;min-width:46rem;font-size:.88rem}
+table{border-collapse:collapse;width:100%;min-width:40rem;font-size:.88rem;table-layout:fixed}
 th,td{text-align:left;padding:.8rem 1rem;border-bottom:1px solid var(--line);vertical-align:top}
 thead th{font-family:ui-monospace,monospace;font-size:.64rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:400;background:var(--surface2);white-space:nowrap}
 td p{margin:.35rem 0 0;color:var(--dim);font-size:.82rem}
-td.num{white-space:nowrap;color:var(--dim);font-variant-numeric:tabular-nums;font-size:.8rem}
+td.num{color:var(--dim);font-variant-numeric:tabular-nums;font-size:.8rem;overflow-wrap:anywhere}
+col.age{width:6rem}col.reason{width:14rem}col.state{width:12rem}
+code{overflow-wrap:anywhere}
 code{font-size:.82rem;color:var(--ink)}
 .v{font-family:ui-monospace,monospace;font-size:.7rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
 .v-remove{color:var(--gold)}
@@ -190,12 +240,16 @@ footer p{max-width:62ch}
     <div class="stat"><b>${summary.total}</b><span>fences standing</span></div>
     <div class="stat"><b>${summary.byKind.code}</b><span>written because of someone else's bug</span></div>
     <div class="stat"><b>${summary.trackers}</b><span>external issues to check</span></div>
-    <div class="stat"><b>${summary.old}</b><span>untouched for 3+ years</span></div>
-    <div class="stat"><b>${summary.oldest === null ? '-' : Math.round(summary.oldest)}</b><span>years, the oldest one</span></div>
+    <div class="stat"><b>${summary.history && summary.history.usable === false ? '-' : summary.old}</b><span>untouched for 3+ years</span></div>
+    <div class="stat"><b>${summary.history && summary.history.usable === false ? '-' : (summary.oldest === null ? '-' : summary.oldest.toFixed(1))}</b><span>years, the oldest one</span></div>
   </div>
+  ${summary.history && summary.history.usable === false ? `<p class="sub">Age was not measured: ${esc(summary.history.why)}.</p>` : ''}
+  ${summary.checkedAt ? `<p class="sub">Issue states read ${esc(summary.checkedAt.newest.slice(0, 10))}.</p>` : ''}
+  ${!checked && summary.trackers > 0 ? `<p class="sub">The trackers were not consulted in this run, so the state column is empty. <code>--check</code> asks them whether these issues are still open.</p>` : ''}
   ${summary.total === 0 ? `<h2>Nothing found</h2>
   <p class="sub">No comment in this codebase records an external reason for the code around it: no tracker link, no deadline, no note about a workaround. That is either a clean codebase or an undocumented one, and this tool cannot tell those apart.</p>` : `<h2>Check these first</h2>
   <div class="scroll"><table>
+    <colgroup><col class="age"><col><col class="reason"><col class="state"></colgroup>
     <thead><tr><th>Untouched</th><th>Where</th><th>Reason given</th><th>${checked ? 'Verdict' : 'State'}</th></tr></thead>
     <tbody>${rows}</tbody>
   </table></div>`}
@@ -223,16 +277,23 @@ footer p{max-width:62ch}
  * Ancient Fences does not edit code: knowing a fence is dead is the scarce
  * part, and every editor now ships something that can do the deleting.
  */
-export function renderTasks(fences, repoName) {
+export function renderTasks(fences, repoName, checked = false) {
   const dead = fences.filter((f) => f.verdict && (f.verdict.level === 'remove' || f.verdict.level === 'upgrade first'));
   const L = [];
   L.push(`# Dead fences in ${repoName}`);
   L.push('');
   L.push(`Each item below is code kept alive by a condition that no longer holds.`);
-  L.push(`Verified against the referenced tracker${dead.some((f) => /shipped in/.test(f.verdict.why)) ? ' and the lockfile' : ''}.`);
+  if (checked) {
+    L.push(`Verified against the referenced tracker${dead.some((f) => /shipped in/.test(f.verdict.why)) ? ' and the lockfile' : ''}.`);
+  } else {
+    L.push(`The trackers were not consulted in this run, so only deadlines written into`);
+    L.push(`the comments were judged. Run with --check to include issue state.`);
+  }
   L.push('');
   if (dead.length === 0) {
-    L.push('Nothing to remove. Run with --check first if you have not.');
+    L.push(checked
+      ? 'Nothing to remove: every recorded reason still holds.'
+      : 'Nothing to remove from deadlines alone. Run again with --check to ask the trackers.');
     return L.join('\n');
   }
   dead.forEach((f, i) => {

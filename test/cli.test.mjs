@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, writeFile, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -91,6 +91,51 @@ assert.doesNotMatch(missing.stdout ?? '', /fences standing/);
 const glued = await run('node', [cli, '.--report[=file]'], { cwd: dir }).catch((e) => e);
 assert.match(glued.stderr, /option got stuck to the path/);
 
+
+// A mistyped flag must stop the run. Silently ignoring "--chek" printed a
+// normal report, and the reader believed the trackers had been consulted.
+const typo = await run('node', [cli, dir, '--chek', '--no-blame']).catch((e) => e);
+assert.equal(typo.code, 2, 'an unknown option is a usage error');
+assert.match(typo.stderr, /unknown option --chek/);
+
+// Two paths at once is a mistake, not a merge.
+const two = await run('node', [cli, dir, dir, '--no-blame']).catch((e) => e);
+assert.equal(two.code, 2);
+
+// A single file is a legitimate thing to scan.
+const one = await run('node', [cli, join(dir, 'app.js'), '--no-blame']);
+assert.match(one.stdout, /2\s+fences standing/);
+
+// The cache belongs to the user, not to the repository being scanned. The
+// first version left a file behind in someone else's working tree.
+const home = await mkdtemp(join(tmpdir(), 'ancient-home-'));
+await run('node', [cli, dir, '--no-blame', '--check', `--api-base=${apiBase}`], {
+  env: { ...process.env, XDG_CACHE_HOME: home },
+});
+await assert.rejects(readFile(join(dir, '.ancient-fences-cache.json'), 'utf8'), 'nothing is written into the scanned repo');
+const cached = await readdir(join(home, 'ancient-fences'));
+assert.equal(cached.length, 1, 'the state is cached under the user cache directory');
+const entry = JSON.parse(await readFile(join(home, 'ancient-fences', cached[0]), 'utf8'));
+assert.ok(Object.values(entry)[0].checkedAt, 'every cached state records when it was read');
+
+// A shallow clone cannot date a line, and the report has to say so instead of
+// printing a confident zero.
+const shallow = await mkdtemp(join(tmpdir(), 'ancient-shallow-'));
+await run('git', ['init', '-q', '-b', 'main', shallow]);
+await writeFile(join(shallow, 'app.js'), '// Workaround for https://github.com/lovell/sharp/issues/1\nexport const a = 1;\n');
+await run('git', ['add', '-A'], { cwd: shallow });
+await run('git', ['-c', 'user.email=t@e.pl', '-c', 'user.name=T', 'commit', '-qm', 'x'], { cwd: shallow });
+const clone = join(await mkdtemp(join(tmpdir(), 'ancient-clone-')), 'c');
+await run('git', ['clone', '-q', '--depth', '1', `file://${shallow}`, clone]);
+const shallowOut = await run('node', [cli, clone]);
+assert.match(shallowOut.stdout, /age not measured/);
+assert.match(shallowOut.stdout, /shallow clone/);
+assert.doesNotMatch(shallowOut.stdout, /fences untouched for 3\+ years/, 'no zero that reads like an all clear');
+
+await rm(home, { recursive: true, force: true });
+await rm(shallow, { recursive: true, force: true });
+await rm(clone, { recursive: true, force: true });
+
 server.close();
 await rm(dir, { recursive: true, force: true });
-console.log('cli: 15 assertions passed');
+console.log('cli: 25 assertions passed');
