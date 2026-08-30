@@ -198,9 +198,13 @@ pull requests.
 ## Ancient Code
 
 Ancient Fences answers one question about one repository. The same blindness
-applies to everything else nobody re-checks in a long-running codebase: what
-was already paid for, which parts only one person understands, whether the
-whole thing could be handed to another team at all. That is
-[Ancient Code](https://ancientcode.net). This tool is its open-source front door.
+applies to everything else nobody re-checks in a long-running codebase: which
+parts only one person understands, whether it builds from scratch, whether the
+documentation still describes the system. [Ancient Code](https://ancientcode.net)
+asks all of them, ships this scanner inside it, and is free and open source too:
+
+```bash
+npx ancient-code .
+```
 
 MIT licensed.
