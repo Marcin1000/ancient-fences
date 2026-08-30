@@ -78,11 +78,15 @@ export async function* walkFiles(root, { includeGenerated = false, skipped = [] 
         continue;
       }
       const generated = looksGenerated(e.name, text);
+      // One spelling of a path, whatever the operating system uses. A report
+      // that says app\\pwa\\lib on one machine and app/pwa/lib on another is
+      // the same report, and code that matches on "/" only works on one of them.
+      const path = relative(root, full).replace(/\\/g, '/');
       if (generated && !includeGenerated) {
-        skipped.push({ path: relative(root, full), why: generated });
+        skipped.push({ path, why: generated });
         continue;
       }
-      yield { path: relative(root, full), text };
+      yield { path, text };
     }
   }
 }

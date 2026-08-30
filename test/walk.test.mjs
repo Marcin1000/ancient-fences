@@ -55,5 +55,11 @@ for await (const f of walkFiles(dir, { skipped, includeGenerated: true })) seen.
 assert.equal(seen.length, 2);
 assert.equal(skipped.length, 0);
 
+// Paths come out with forward slashes on every platform, so a report reads the
+// same everywhere and so the checks that match on "/" keep working on Windows.
+seen = [];
+for await (const f of walkFiles(dir, { skipped: [] })) seen.push(f.path);
+assert.equal(seen.every((p) => !p.includes('\\')), true, 'no backslashes in reported paths');
+
 await rm(dir, { recursive: true, force: true });
-console.log('walk: 11 assertions passed');
+console.log('walk: 12 assertions passed');
