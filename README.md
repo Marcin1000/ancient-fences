@@ -52,17 +52,23 @@ that no longer exists.
 
 Two runs, full clones, August 2026:
 
-| Repository | Fences | Because of someone else's bug | Untouched 3+ years | Oldest |
-|---|---|---|---|---|
-| puppeteer/puppeteer | 77 | 62 | 48 | 9.1 yr |
-| webpack/webpack | 93 | 65 | 23 | 8.8 yr |
+| Repository | In source | In tests | Oldest |
+|---|---|---|---|
+| puppeteer/puppeteer | 32 | 45 | 9.1 yr |
+| webpack/webpack | 54 | 39 | 8.8 yr |
+| eslint/eslint | 43 | 399 | 8.2 yr |
+| expressjs/express | 0 | 2 | 1.9 yr |
 
 Both are well-maintained projects by good engineers. That is the point.
 
-Measured on a full clone, because a shallow one cannot date a line. Numbers
-from earlier versions were higher and worse: counting the word "until" as
-evidence turned two hundred ordinary comments in webpack into findings. A
-number you have to discount is not worth printing.
+Measured on a full clone, because a shallow one cannot date a line.
+
+The two columns are the point. A comment in a test that links to an issue is
+usually the regression test for that bug: it exists because of the bug, exactly
+like a workaround, but a closed issue is the reason to **keep** it. eslint has
+399 of those and 43 in its source. Mixing them into one number would have made
+eslint look ten times worse than it is, and would have told an agent to delete
+the tests that guard fixed bugs.
 
 ## What it finds
 
@@ -122,7 +128,7 @@ green light. A tool that reassures you without grounds is worse than no tool.
 --report[=file]     write a shareable HTML report (default: ancient-fences.html)
 --tasks[=file]      write the dead fences as instructions for a coding agent
 --api-base=URL      alternate API (GitHub Enterprise, or a mock in tests)
---json              full machine-readable output
+--json              full machine-readable output (counts split by source and tests)
 --no-blame          skip fence age (faster, tells you less)
 --include-generated scan bundles and minified builds too
 --cache=FILE        where to keep issue states

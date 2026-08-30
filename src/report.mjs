@@ -1,3 +1,5 @@
+import { isTestPath } from './paths.mjs';
+
 const YEAR = 365.25 * 24 * 3600 * 1000;
 
 export function yearsSince(date) {
@@ -14,12 +16,14 @@ export const KIND_LABEL = {
 
 export function summarize(fences, states = new Map()) {
   const byKind = { code: 0, docs: 0, deadline: 0, unmarked: 0 };
+  let inTests = 0;
   const trackers = new Set();
   let overdue = 0;
   let old = 0;
   let oldest = null;
   for (const f of fences) {
     byKind[f.kind]++;
+    if (isTestPath(f.file)) inTests++;
     if (f.premise.type === 'tracker') for (const r of f.premise.refs) trackers.add(r.id);
     if (f.premise.type === 'date' && f.premise.overdue) overdue++;
     const y = yearsSince(f.lastTouched);
@@ -32,7 +36,18 @@ export function summarize(fences, states = new Map()) {
     if (states.size === 0 && f.premise.type !== 'date') continue;
     verdicts[f.verdict.level] = (verdicts[f.verdict.level] ?? 0) + 1;
   }
-  return { total: fences.length, byKind, trackers: trackers.size, overdue, old, oldest, verdicts, checked: states.size };
+  return {
+    total: fences.length,
+    inTests,
+    inSource: fences.length - inTests,
+    byKind,
+    trackers: trackers.size,
+    overdue,
+    old,
+    oldest,
+    verdicts,
+    checked: states.size,
+  };
 }
 
 /**
@@ -55,7 +70,13 @@ export function byFile(fences, limit = 8) {
 export function ranked(fences) {
   return fences
     .filter((f) => f.premise.type === 'tracker' || (f.premise.type === 'date' && f.premise.overdue))
-    .sort((a, b) => (yearsSince(b.lastTouched) ?? 0) - (yearsSince(a.lastTouched) ?? 0));
+    .sort((a, b) => {
+      // Tests come last: a link to an issue in a test is usually the bug that
+      // test guards, and a closed issue is a reason to keep it, not to remove it.
+      const t = Number(isTestPath(a.file)) - Number(isTestPath(b.file));
+      if (t !== 0) return t;
+      return (yearsSince(b.lastTouched) ?? 0) - (yearsSince(a.lastTouched) ?? 0);
+    });
 }
 
 function premiseOf(f) {
@@ -91,6 +112,10 @@ export function renderText(fences, summary, repoName, checked = false) {
   L.push(`  ${n(summary.byKind.docs)}  documented limitations pointing at an issue`);
   L.push(`  ${n(summary.byKind.deadline)}  deadlines in comments (passed: ${summary.overdue})`);
   L.push(`  ${n(summary.byKind.unmarked)}  fences with no sign`);
+  if (summary.inTests) {
+    L.push(`  ${n(summary.inTests)}  of them in tests, where a link to an issue is usually the bug`);
+    L.push('        that test guards, so a closed issue means keep it, not remove it');
+  }
   L.push('  ' + '-'.repeat(70));
   L.push(`  ${n(summary.trackers)}  distinct external issues to check`);
   if (summary.history && summary.history.usable === false) {
@@ -239,6 +264,7 @@ footer p{max-width:62ch}
   <div class="stats">
     <div class="stat"><b>${summary.total}</b><span>fences standing</span></div>
     <div class="stat"><b>${summary.byKind.code}</b><span>written because of someone else's bug</span></div>
+    <div class="stat"><b>${summary.inTests ?? 0}</b><span>of them in tests, where a closed issue means keep</span></div>
     <div class="stat"><b>${summary.trackers}</b><span>external issues to check</span></div>
     <div class="stat"><b>${summary.history && summary.history.usable === false ? '-' : summary.old}</b><span>untouched for 3+ years</span></div>
     <div class="stat"><b>${summary.history && summary.history.usable === false ? '-' : (summary.oldest === null ? '-' : summary.oldest.toFixed(1))}</b><span>years, the oldest one</span></div>
@@ -278,7 +304,9 @@ footer p{max-width:62ch}
  * part, and every editor now ships something that can do the deleting.
  */
 export function renderTasks(fences, repoName, checked = false) {
-  const dead = fences.filter((f) => f.verdict && (f.verdict.level === 'remove' || f.verdict.level === 'upgrade first'));
+  const all = fences.filter((f) => f.verdict && (f.verdict.level === 'remove' || f.verdict.level === 'upgrade first'));
+  const dead = all.filter((f) => !isTestPath(f.file));
+  const inTests = all.filter((f) => isTestPath(f.file));
   const L = [];
   L.push(`# Dead fences in ${repoName}`);
   L.push('');
@@ -292,8 +320,12 @@ export function renderTasks(fences, repoName, checked = false) {
   L.push('');
   if (dead.length === 0) {
     L.push(checked
-      ? 'Nothing to remove: every recorded reason still holds.'
+      ? 'Nothing to remove in source: every recorded reason still holds.'
       : 'Nothing to remove from deadlines alone. Run again with --check to ask the trackers.');
+    if (inTests.length > 0) {
+      L.push('');
+      L.push(`${inTests.length} finding${inTests.length === 1 ? ' is' : 's are'} in tests, listed at the end. They are not work.`);
+    }
     return L.join('\n');
   }
   dead.forEach((f, i) => {
@@ -314,6 +346,20 @@ export function renderTasks(fences, repoName, checked = false) {
     }
     L.push('');
   });
+  if (inTests.length > 0) {
+    L.push('---');
+    L.push('');
+    L.push(`## Not work: ${inTests.length} of these are in tests`);
+    L.push('');
+    L.push('A test that links to an issue is usually the regression test for that');
+    L.push('bug. The issue being closed is why the test exists, not a reason to');
+    L.push('delete it. Do not touch these unless the behaviour they check is gone:');
+    L.push('');
+    for (const f of inTests.slice(0, 40)) {
+      L.push(`- ${f.file}:${f.line} (${premiseOf(f)})`);
+    }
+    L.push('');
+  }
   L.push('---');
   L.push('Generated by Ancient Fences. Verify each removal with tests before merging.');
   return L.join('\n');
