@@ -136,6 +136,32 @@ await rm(home, { recursive: true, force: true });
 await rm(shallow, { recursive: true, force: true });
 await rm(clone, { recursive: true, force: true });
 
+// A number option that quietly swallowed nonsense was the same failure as the
+// mistyped flag: -5 days meant every cached state was stale on arrival, and
+// nothing said so.
+for (const bad of ['abc', '-5']) {
+  const r = await run('node', [cli, dir, `--max-age-days=${bad}`, '--no-blame']).catch((e) => e);
+  assert.equal(r.code, 2, `--max-age-days=${bad} must be rejected`);
+  assert.match(r.stderr, /zero or more/);
+}
+const goodDays = await run('node', [cli, dir, '--max-age-days=14', '--no-blame']);
+assert.match(goodDays.stdout, /fences standing/, 'a real number of days still works');
+
+// --report=$FILE with FILE unset used to reach the filesystem and crash with a
+// stack trace pointing into Node internals.
+for (const f of ['--report', '--tasks', '--cache', '--api-base']) {
+  const r = await run('node', [cli, dir, `${f}=`, '--no-blame']).catch((e) => e);
+  assert.equal(r.code, 2, `${f}= must be rejected`);
+  assert.match(r.stderr, new RegExp(`${f}= needs a value`));
+}
+
+// A path that cannot be written is a sentence, not a stack trace.
+const unwritable = await run('node', [cli, dir, `--report=${dir}`, '--no-blame']).catch((e) => e);
+assert.equal(unwritable.code, 2);
+assert.match(unwritable.stderr, /could not write/);
+assert.ok(!/at async/.test(unwritable.stderr), 'no stack trace in a user-facing error');
+
 server.close();
 await rm(dir, { recursive: true, force: true });
-console.log('cli: 25 assertions passed');
+
+console.log('cli: 38 assertions passed');

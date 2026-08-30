@@ -1,6 +1,6 @@
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/readme-banner.png">
-  <img src="assets/readme-banner-light.png" alt="Ancient Fences" width="100%">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Marcin1000/ancient-fences/main/assets/readme-banner.png">
+  <img src="https://raw.githubusercontent.com/Marcin1000/ancient-fences/main/assets/readme-banner-light.png" alt="Ancient Fences" width="100%">
 </picture>
 
 # Ancient Fences

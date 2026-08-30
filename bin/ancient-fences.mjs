@@ -72,6 +72,22 @@ if (positional.length > 1) {
   process.exit(2);
 }
 
+const days = value('--max-age-days');
+if (days !== null && (!Number.isFinite(Number(days)) || Number(days) < 0)) {
+  console.error(`ancient-fences: --max-age-days needs a number of days that is zero or more, not "${days}"`);
+  process.exit(2);
+}
+
+// An empty value is almost always a shell mishap (--report=$FILE with FILE
+// unset). Writing to the current directory, or crashing on it, are both worse
+// than saying what happened.
+for (const f of ['--report', '--tasks', '--cache', '--api-base']) {
+  if (flags.includes(`${f}=`)) {
+    console.error(`ancient-fences: ${f}= needs a value`);
+    process.exit(2);
+  }
+}
+
 const target = resolve(positional[0] ?? process.cwd());
 
 // Scanning a path that is not there used to print a clean report saying zero
@@ -153,15 +169,24 @@ const name = single ? basename(single) : basename(root);
 const reportFlag = flags.find((f) => f === '--report' || f.startsWith('--report='));
 if (reportFlag) {
   const out = resolve(value('--report') ?? 'ancient-fences.html');
-  await writeFile(out, renderHtml(fences, summary, name, checking), 'utf8');
-  console.error(`report written to ${out}`);
+  await write(out, renderHtml(fences, summary, name, checking), 'report');
 }
 
 const tasksFlag = flags.find((f) => f === '--tasks' || f.startsWith('--tasks='));
 if (tasksFlag) {
   const out = resolve(value('--tasks') ?? 'ancient-fences-tasks.md');
-  await writeFile(out, renderTasks(fences, name, checking), 'utf8');
-  console.error(`agent tasks written to ${out}`);
+  await write(out, renderTasks(fences, name, checking), 'agent tasks');
+}
+
+/** A file that cannot be written is reported as such, not as a stack trace. */
+async function write(out, body, what) {
+  try {
+    await writeFile(out, body, 'utf8');
+  } catch (err) {
+    console.error(`ancient-fences: could not write ${out}: ${err.message}`);
+    process.exit(2);
+  }
+  console.error(`${what} written to ${out}`);
 }
 
 if (has('--json')) {
