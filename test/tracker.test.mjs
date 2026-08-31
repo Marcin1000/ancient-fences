@@ -1,6 +1,7 @@
 import { createServer } from 'node:http';
 import assert from 'node:assert/strict';
 import { checkGithubRefs, verdict } from '../src/tracker.mjs';
+import { unreachable } from '../src/report.mjs';
 
 // Mock API: one closed issue, one open issue, one that does not exist.
 const server = createServer((req, res) => {
@@ -34,4 +35,25 @@ assert.equal(verdict(fence(['github:a/b#9']), states).level, 'unchecked');
 assert.equal(verdict({ premise: { type: 'date', date: '2020-01-01', overdue: true } }, states).level, 'remove');
 
 server.close();
-console.log('tracker: 10 assertions passed');
+
+// "unchecked" printed on its own reads as a bug in this tool. The reason the
+// tracker could not answer was recorded and then thrown away before anybody
+// could see it, so a rate limit and a missing network looked identical.
+const fences = [
+  { verdict: { level: 'unchecked', why: 'HTTP 403 (rate limit)' } },
+  { verdict: { level: 'unchecked', why: 'HTTP 403 (rate limit)' } },
+  { verdict: { level: 'unchecked', why: 'network: fetch failed' } },
+  { verdict: { level: 'unmarked', why: 'no recorded reason for this code' } },
+  { verdict: { level: 'remove', why: 'the issue is closed' } },
+  { verdict: null },
+  {},
+];
+assert.deepEqual(unreachable(fences), [
+  ['HTTP 403 (rate limit)', 2],
+  ['network: fetch failed', 1],
+], 'grouped by reason, most common first');
+assert.deepEqual(unreachable([]), []);
+assert.deepEqual(unreachable([{ verdict: { level: 'unmarked', why: 'no recorded reason for this code' } }]), [],
+  'a fence with no external reason was never going to be checked');
+
+console.log('tracker: 13 assertions passed');

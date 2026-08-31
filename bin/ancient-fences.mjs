@@ -8,6 +8,7 @@ import { detectFences } from '../src/detect.mjs';
 import { blameAll, historyDepth } from '../src/age.mjs';
 import { checkGithubRefs, verdict } from '../src/tracker.mjs';
 import { renderText, renderHtml, renderTasks, summarize } from '../src/report.mjs';
+import { projectName } from '../src/name.mjs';
 import { readInstalled } from '../src/lockfile.mjs';
 
 const args = process.argv.slice(2);
@@ -164,7 +165,10 @@ summary.skippedFiles = skipped;
 summary.history = history;
 summary.checkedAt = checking ? checkTimestamp(states) : null;
 
-const name = single ? basename(single) : basename(root);
+// Scanning one file, its own name is the subject. Scanning a repository, the
+// folder is the last resort: a full clone of webpack in webpackfull/ produced
+// a report titled "webpackfull".
+const name = single ? basename(single) : await projectName(root);
 
 const reportFlag = flags.find((f) => f === '--report' || f.startsWith('--report='));
 if (reportFlag) {

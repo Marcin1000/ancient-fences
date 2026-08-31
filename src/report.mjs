@@ -149,6 +149,11 @@ export function renderText(fences, summary, repoName, checked = false) {
     for (const [level, count] of Object.entries(summary.verdicts).sort((a, b) => b[1] - a[1])) {
       L.push(`  ${String(count).padStart(4)}  ${level}`);
     }
+    // "unchecked" on its own reads as a bug in this tool. The reason was
+    // recorded and then thrown away before anybody could see it.
+    for (const [why, count] of unreachable(fences)) {
+      L.push(`        ${count} of them because the tracker could not answer: ${why}`);
+    }
     L.push('');
   }
 
@@ -192,6 +197,22 @@ export function renderText(fences, summary, repoName, checked = false) {
   return L.join('\n');
 }
 
+/**
+ * Why the tracker could not answer, grouped and counted. Rate limiting, no
+ * network and a repository that needs a token all land here, and each one is
+ * something the reader can act on. Silence is not.
+ */
+export function unreachable(fences) {
+  const reasons = new Map();
+  for (const f of fences) {
+    const why = f.verdict?.why;
+    if (f.verdict?.level !== 'unchecked' || !why) continue;
+    if (/no recorded reason/.test(why)) continue;
+    reasons.set(why, (reasons.get(why) ?? 0) + 1);
+  }
+  return [...reasons.entries()].sort((a, b) => b[1] - a[1]);
+}
+
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 /**
@@ -212,10 +233,10 @@ export function renderHtml(fences, summary, repoName, checked = false) {
     const y = yearsSince(f.lastTouched);
     const v = f.verdict;
     return `<tr>
-      <td class="num">${y === null ? '-' : y.toFixed(1) + ' yr'}</td>
-      <td><code>${esc(f.file)}:${f.line}</code><p>${esc(f.text.slice(0, 130))}</p></td>
-      <td class="num">${esc(premiseOf(f))}</td>
-      <td>${showVerdict(f, checked) ? `<span class="v v-${esc(v.level.replace(/\s+/g, '-'))}">${esc(v.level)}</span><p>${esc(v.why)}</p>` : '<span class="v">not checked</span>'}</td>
+      <td data-label="Untouched" class="num">${y === null ? '-' : y.toFixed(1) + ' yr'}</td>
+      <td data-label="Where"><code>${esc(f.file)}:${f.line}</code><p>${esc(f.text.slice(0, 130))}</p></td>
+      <td data-label="Reason given" class="num">${esc(premiseOf(f))}</td>
+      <td data-label="${checked ? 'Verdict' : 'State'}">${showVerdict(f, checked) ? `<span class="v v-${esc(v.level.replace(/\s+/g, '-'))}">${esc(v.level)}</span><p>${esc(v.why)}</p>` : '<span class="v">not checked</span>'}</td>
     </tr>`;
   }).join('\n');
 
@@ -224,8 +245,8 @@ export function renderHtml(fences, summary, repoName, checked = false) {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Ancient Fences: ${esc(repoName)}</title>
 <style>
-:root{--ground:#0F1216;--surface:#171C22;--surface2:#1E242B;--line:#2B333B;--ink:#E7E1D4;--dim:#A7A69C;--muted:#83877F;--gold:#E0A45C;--inst:#8FC3D2}
-@media (prefers-color-scheme:light){:root{--ground:#E3E2DC;--surface:#EDEBE4;--surface2:#F3F1EB;--line:#CFCCC1;--ink:#1A1E22;--dim:#4A4F53;--muted:#6B6F68;--gold:#8F5B18;--inst:#2E6B7C}}
+:root{--ground:#0F1216;--surface:#171C22;--surface2:#1E242B;--line:#2B333B;--ink:#E7E1D4;--dim:#A7A69C;--muted:#878B83;--gold:#E0A45C;--inst:#8FC3D2}
+@media (prefers-color-scheme:light){:root{--ground:#E3E2DC;--surface:#EDEBE4;--surface2:#F3F1EB;--line:#CFCCC1;--ink:#1A1E22;--dim:#4A4F53;--muted:#62665F;--gold:#8B5514;--inst:#2E6B7C}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--ground);color:var(--ink);font:16px/1.6 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:68rem;margin:0 auto;padding:0 clamp(1rem,4vw,2.5rem)}
@@ -239,8 +260,12 @@ h1{font:300 clamp(2rem,5vw,3.2rem)/1.05 ui-serif,Georgia,serif;letter-spacing:-.
 .stat b{font:400 2rem/1 ui-monospace,monospace;color:var(--gold);font-variant-numeric:tabular-nums}
 .stat span{font-size:.78rem;color:var(--dim);line-height:1.35}
 h2{font:300 1.6rem/1.1 ui-serif,Georgia,serif;margin:2.5rem 0 1rem}
+.brand{display:flex;align-items:center;gap:.6rem;color:var(--ink);margin-bottom:1.4rem}
+.brand span{font:300 1.2rem/1 ui-serif,Georgia,serif;transform:translateY(.09em)}
+.brand b{color:var(--gold);font-weight:300}
 .scroll{overflow-x:auto;border:1px solid var(--line);background:var(--surface)}
 table{border-collapse:collapse;width:100%;min-width:40rem;font-size:.88rem;table-layout:fixed}
+}
 th,td{text-align:left;padding:.8rem 1rem;border-bottom:1px solid var(--line);vertical-align:top}
 thead th{font-family:ui-monospace,monospace;font-size:.64rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:400;background:var(--surface2);white-space:nowrap}
 td p{margin:.35rem 0 0;color:var(--dim);font-size:.82rem}
@@ -254,9 +279,31 @@ code{font-size:.82rem;color:var(--ink)}
 footer{border-top:1px solid var(--line);margin-top:3rem;padding:2rem 0 4rem;color:var(--muted);font-size:.85rem}
 footer strong{color:var(--ink)}
 footer p{max-width:62ch}
+/* Four columns of file paths never fit on a phone. Forced side by side, one
+   column collapses to nothing and its text prints a letter per line. Below this
+   width every row becomes a small block with its label in front. */
+@media (max-width:640px){
+  .scroll{overflow-x:visible}
+  table,tbody{display:block;width:100%;min-width:0}
+  thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  tr{display:flex;flex-wrap:wrap;border-bottom:1px solid var(--line);padding:.55rem .2rem}
+  tr:last-child{border-bottom:0}
+  td{display:block;flex:1 1 100%;min-width:0;border-bottom:0;padding:.3rem 1rem;overflow-wrap:anywhere}
+  td.num{flex:0 0 auto;min-width:7rem;max-width:100%;white-space:normal}
+  td[data-label]::before{display:block;content:attr(data-label);font-family:ui-monospace,monospace;font-size:.6rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:.15rem}
+}
 </style></head><body>
 <header><div class="wrap">
-  <p class="mono">Ancient Fences · ${esc(new Date().toISOString().slice(0, 10))}</p>
+  <div class="brand">
+    <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
+      <rect x="2.6" y="3.2" width="18.8" height="2.4" fill="currentColor"/>
+      <rect x="5.6" y="7.4" width="2.4" height="13.4" fill="currentColor"/>
+      <rect x="10.8" y="7.4" width="2.4" height="13.4" fill="currentColor"/>
+      <rect x="16" y="7.4" width="2.4" height="13.4" fill="currentColor"/>
+      <rect x="3.4" y="12.6" width="17.2" height="1.8" fill="var(--gold)"/>
+    </svg><span>Ancient <b>Fences</b></span>
+  </div>
+  <p class="mono">Scanned ${esc(new Date().toISOString().slice(0, 10))}</p>
   <h1>${esc(repoName)}</h1>
   <p class="sub">Code that exists because of an external problem, and whether that problem is still there.</p>
 </div></header>
@@ -272,6 +319,7 @@ footer p{max-width:62ch}
   ${summary.history && summary.history.usable === false ? `<p class="sub">Age was not measured: ${esc(summary.history.why)}.</p>` : ''}
   ${summary.checkedAt ? `<p class="sub">Issue states read ${esc(summary.checkedAt.newest.slice(0, 10))}.</p>` : ''}
   ${!checked && summary.trackers > 0 ? `<p class="sub">The trackers were not consulted in this run, so the state column is empty. <code>--check</code> asks them whether these issues are still open.</p>` : ''}
+  ${checked && unreachable(fences).length ? `<p class="sub">The tracker could not answer for ${unreachable(fences).reduce((a, [, n]) => a + n, 0)} of these: ${esc(unreachable(fences).map(([why, n]) => `${n} × ${why}`).join(', '))}. Their state is unknown, which is not the same as still valid.</p>` : ''}
   ${summary.total === 0 ? `<h2>Nothing found</h2>
   <p class="sub">No comment in this codebase records an external reason for the code around it: no tracker link, no deadline, no note about a workaround. That is either a clean codebase or an undocumented one, and this tool cannot tell those apart.</p>` : `<h2>Check these first</h2>
   <div class="scroll"><table>
@@ -282,13 +330,13 @@ footer p{max-width:62ch}
   ${fences.length ? `<h2>Where they are</h2>
   <div class="scroll"><table>
     <thead><tr><th>File</th><th>Fences</th><th>Kinds</th></tr></thead>
-    <tbody>${byFile(fences, 15).map((r) => `<tr><td><code>${esc(r.file)}</code></td><td class="num">${r.total}</td><td class="num">${esc(Object.entries(r.kinds).map(([k, n]) => `${n} ${k}`).join(', '))}</td></tr>`).join('\n')}</tbody>
+    <tbody>${byFile(fences, 15).map((r) => `<tr><td data-label="File"><code>${esc(r.file)}</code></td><td data-label="Fences" class="num">${r.total}</td><td data-label="Kinds" class="num">${esc(Object.entries(r.kinds).map(([k, n]) => `${n} ${k}`).join(', '))}</td></tr>`).join('\n')}</tbody>
   </table></div>` : ''}
   ${summary.skipped ? `<h2>Left out</h2>
   <p class="sub">${summary.skipped} file${summary.skipped === 1 ? ' was' : 's were'} skipped as a build product. The fences inside a bundle belong to the libraries it was built from, not to this team.</p>
   <div class="scroll"><table>
     <thead><tr><th>File</th><th>Why</th></tr></thead>
-    <tbody>${(summary.skippedFiles ?? []).map((f) => `<tr><td><code>${esc(f.path)}</code></td><td class="num">${esc(f.why)}</td></tr>`).join('\n')}</tbody>
+    <tbody>${(summary.skippedFiles ?? []).map((f) => `<tr><td data-label="File"><code>${esc(f.path)}</code></td><td data-label="Why" class="num">${esc(f.why)}</td></tr>`).join('\n')}</tbody>
   </table></div>` : ''}
 </main>
 <footer><div class="wrap">
