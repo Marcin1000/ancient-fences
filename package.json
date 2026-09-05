@@ -1,6 +1,6 @@
 {
   "name": "ancient-fences",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Finds the code you wrote because of someone else's bug, and checks whether that bug is still there.",
   "type": "module",
   "bin": {
@@ -25,7 +25,7 @@
   },
   "license": "MIT",
   "scripts": {
-    "test": "node test/detect.test.mjs && node test/tracker.test.mjs && node test/versions.test.mjs && node test/lockfile.test.mjs && node test/paths.test.mjs && node test/walk.test.mjs && node test/cli.test.mjs"
+    "test": "node test/detect.test.mjs && node test/tracker.test.mjs && node test/versions.test.mjs && node test/lockfile.test.mjs && node test/paths.test.mjs && node test/walk.test.mjs && node test/stylesheet.test.mjs && node test/cli.test.mjs"
   },
   "repository": {
     "type": "git",

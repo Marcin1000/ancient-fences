@@ -265,12 +265,15 @@ h2{font:300 1.6rem/1.1 ui-serif,Georgia,serif;margin:2.5rem 0 1rem}
 .brand b{color:var(--gold);font-weight:300}
 .scroll{overflow-x:auto;border:1px solid var(--line);background:var(--surface)}
 table{border-collapse:collapse;width:100%;min-width:40rem;font-size:.88rem;table-layout:fixed}
-}
 th,td{text-align:left;padding:.8rem 1rem;border-bottom:1px solid var(--line);vertical-align:top}
 thead th{font-family:ui-monospace,monospace;font-size:.64rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:400;background:var(--surface2);white-space:nowrap}
 td p{margin:.35rem 0 0;color:var(--dim);font-size:.82rem}
 td.num{color:var(--dim);font-variant-numeric:tabular-nums;font-size:.8rem;overflow-wrap:anywhere}
-col.age{width:6rem}col.reason{width:14rem}col.state{width:12rem}
+/* github:microsoft/TypeScript#41697 is 30 characters, and at 14rem it broke in
+   the middle of the word. A tracker id split across two lines is not an id
+   anybody can search for. Measured on webpack: 29 of 40 broke at 14rem, 2 at
+   19rem, and widening further changed nothing. */
+col.age{width:6rem}col.reason{width:19rem}col.state{width:11rem}
 code{overflow-wrap:anywhere}
 code{font-size:.82rem;color:var(--ink)}
 .v{font-family:ui-monospace,monospace;font-size:.7rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
