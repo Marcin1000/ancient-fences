@@ -18,7 +18,12 @@
     "chesterton-fence",
     "code-audit",
     "maintenance",
-    "stale-code"
+    "stale-code",
+    "dead-code",
+    "legacy-code",
+    "refactoring",
+    "coding-agent",
+    "cli"
   ],
   "engines": {
     "node": ">=20"
